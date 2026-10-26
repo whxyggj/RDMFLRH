@@ -1,31 +1,31 @@
 function [V_star, obj, error_cnt] = myDMF(X, layers, varargin)
 % Input: X(M*nSmp)
 % layers >= 2
-warning('off');
+% Keep warnings enabled for the caller.
 pnames = {'maxiter', 'tolfun', 'lambda', 'gamma'};
 dflts  = {500, 1e-5, 0, 0};
 [maxiter, tolfun, lambda, gamma] = internal.stats.parseArgs(pnames,dflts,varargin{:});
 
-view_num = length(X); % ÊÓÍ¼¸öÊý
-layer_num = length(layers); % ·Ö½â²ãÊý
+view_num = length(X); % è§†å›¾ä¸ªæ•°
+layer_num = length(layers); % åˆ†è§£å±‚æ•°
 
 U = cell(view_num, layer_num);
 V = cell(view_num, layer_num);
 V_err = cell(view_num, layer_num);
 obj = zeros(1, 1);
 
-% Êý¾Ý½øÐÐ¹éÒ»»¯
+% æ•°æ®è¿›è¡Œå½’ä¸€åŒ–
 for i = 1: view_num
     [X{i}, ~] = data_normalization(X{i}, [], 'std');
 end
 
-% ¹¹½¨³¬Í¼
-L = cell(1, view_num); % ³¬À­ÆÕÀ­Ë¹
-W = cell(1, view_num); % ÏàËÆ¶È¾ØÕó
-W1 = cell(1, view_num); % ¶È¾ØÕó
+% æž„å»ºè¶…å›¾
+L = cell(1, view_num); % è¶…æ‹‰æ™®æ‹‰æ–¯
+W = cell(1, view_num); % ç›¸ä¼¼åº¦çŸ©é˜µ
+W1 = cell(1, view_num); % åº¦çŸ©é˜µ
 param.k = 5;
 for view_idx = 1: view_num
-    HG = gsp_nn_hypergraph(X{view_idx}', param); % ÊäÈëÊÇn*m
+    HG = gsp_nn_hypergraph(X{view_idx}', param); % è¾“å…¥æ˜¯n*m
     % L = Dv - S
     L{view_idx} = HG.L;
     W1{view_idx} = diag(HG.dv);
@@ -33,26 +33,26 @@ for view_idx = 1: view_num
     W{view_idx} = W1{view_idx} - L{view_idx};
 end
 
-% Ô¤ÑµÁ·
+% é¢„è®­ç»ƒ
 for view_idx = 1: view_num
     for layer_idx = 1: layer_num
         if layer_idx == 1
-           upper_V = X{view_idx}; 
+           upper_V = X{view_idx};
         else
            upper_V = V{view_idx, layer_idx-1};
         end
-        % Ê¹ÓÃkmeans½øÐÐ³õÊ¼»¯
+        % ä½¿ç”¨kmeansè¿›è¡Œåˆå§‹åŒ–
         [U{view_idx, layer_idx}, V{view_idx, layer_idx}] = KMeansdata(upper_V, layers(layer_idx));
-            % Ê¹ÓÃnmf½øÐÐ³õÊ¼»¯
+            % ä½¿ç”¨nmfè¿›è¡Œåˆå§‹åŒ–
         %[U{view_idx, layer_idx}, V{view_idx, layer_idx}] = NMFdata(upper_V, layers(layer_idx));
-    end    
+    end
 end
 
 
-% ¸üÐÂ´íÎó¼ÆÊýÆ÷
+% æ›´æ–°é”™è¯¯è®¡æ•°å™¨
 error_cnt = 0;
 
-% µü´ú¸üÐÂ
+% è¿­ä»£æ›´æ–°
 for iter = 1: maxiter
    for view_idx = 1: view_num
 
@@ -61,7 +61,7 @@ for iter = 1: maxiter
        for layer_idx = layer_num-1: -1: 1
            V_err{view_idx,layer_idx} = U{view_idx, layer_idx+1} * V_err{view_idx, layer_idx+1};
        end
-       
+
        for layer_idx = 1: layer_num
            if layer_idx == 1
                % update D
@@ -80,14 +80,14 @@ for iter = 1: maxiter
                tempDown = (PHI')*PHI*U{view_idx, layer_idx}*V_err{view_idx,layer_idx}*D*(V_err{view_idx,layer_idx}');
                U{view_idx, layer_idx} = U{view_idx, layer_idx} .* (tempUp ./ max(tempDown, 1e-9));
            end
-           
+
             % update PHI
             if layer_idx == 1
                 PHI = U{view_idx, 1};
             else
                 PHI = PHI * U{view_idx, layer_idx};
             end
-            
+
             % update V^p_l
             % update D
             if layer_idx == layer_num
@@ -97,25 +97,25 @@ for iter = 1: maxiter
                 [uhat,~,vhat] = svd(full(V{view_idx,layer_idx}),'econ');
                 UVT=uhat*vhat';
                 UVT1=(UVT+abs(UVT))/2;
-                UVT2=(UVT-abs(UVT))/2; 
+                UVT2=(UVT-abs(UVT))/2;
                 tempUp = (PHI')*X{view_idx}*D -lambda*UVT2 + gamma*V{view_idx, layer_idx}*W{view_idx};
                 tempDown = (PHI')*PHI*V{view_idx,layer_idx}*D + lambda*UVT1 + gamma*V{view_idx, layer_idx}*W1{view_idx};
-                V{view_idx,layer_idx} = V{view_idx,layer_idx} .* (tempUp ./ max(tempDown, 1e-9)); 
+                V{view_idx,layer_idx} = V{view_idx,layer_idx} .* (tempUp ./ max(tempDown, 1e-9));
             end
 
        end
-       
+
    end
 
    obj(iter) = Calc_obj_value(X, U, V, L, lambda, gamma, layers);
    fprintf('iter = %d, obj = %g\n', iter, obj(iter));
    if (iter>=2)&&(obj(iter)>obj(iter-1))
-      error_cnt = error_cnt + 1; 
+      error_cnt = error_cnt + 1;
    end
     if (iter>2) && (abs((obj(iter-1)-obj(iter))/(obj(iter-1)))<tolfun)|| iter==maxiter
         break;
     end
-   
+
 end
 V_star = zeros(size(V{view_num, layer_num}));
 for view_idx = 1: view_num
@@ -127,12 +127,12 @@ V_star = V_star/view_num;
 end
 
 function [obj_value] = Calc_obj_value(X, U, V, L, lambda, gamma, layers)
-view_num = length(X); % ÊÓÍ¼¸öÊý
-layer_num = length(layers); % ·Ö½â²ãÊý
-% logËðÊ§
+view_num = length(X); % è§†å›¾ä¸ªæ•°
+layer_num = length(layers); % åˆ†è§£å±‚æ•°
+% logæŸå¤±
 obj_value = Cauthy_NMF_cost(X, U, V, view_num, layer_num);
 for view_idx = 1: view_num
-    % ¶¥²ãÍ¼ÕýÔò»¯
+    % é¡¶å±‚å›¾æ­£åˆ™åŒ–
     obj_value = obj_value...
         + lambda*obj_SVD(V,view_num,layer_num)...
         + gamma*trace(V{view_idx, layer_num}*L{view_idx}*(V{view_idx, layer_num}'));
@@ -168,7 +168,7 @@ end
 
 
 function [out] = reconstruction(U, V, layer_num, view_idx)
-% out µ±Ç°ÊÓÍ¼µÄÖØ½¨¾ØÕó
+% out å½“å‰è§†å›¾çš„é‡å»ºçŸ©é˜µ
 out = V{view_idx, layer_num};
 for k = layer_num : -1 : 1
     out =  U{view_idx, k} * out;
@@ -204,4 +204,3 @@ function [D] = get_weight_matrix(E)
 Ei = max(sqrt(sum(E.^2, 1)), 1e-9);
 D = diag(1./((2*Ei).*(1+Ei.^(2))));
 end
-
